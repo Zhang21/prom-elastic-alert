@@ -4,3 +4,6 @@ tmp/*
 example/prom-alert/db/*
 example/prom-alert/logs/*
 example/alertmanager/data/*
+vendor/
+prom-elastic-alert
+demo-config.yaml
