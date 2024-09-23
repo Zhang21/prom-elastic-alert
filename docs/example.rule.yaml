@@ -3,6 +3,7 @@ enabled: true #是否开启, false则关闭此rule
 es: #要查询的ES地址信息
   addresses:
     - "http://127.0.0.1:9200"
+    - "https://es2:9200"
   username: ""
   password: ""
   version: "v7"
@@ -11,7 +12,7 @@ run_every: #查询任务频率
   seconds: 5
 query:
   type: "frequency" #默认frequency
-  query_string: '$query_string' #query_string查询语句
+  query_string: '$query_string' #query_string查询语句，如 message:"error", time>500 等等条件
   config:
     timeframe: #3分钟内
       minutes: 3
