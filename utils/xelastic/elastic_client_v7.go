@@ -5,11 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"strings"
+
 	"github.com/dream-mo/prom-elastic-alert/utils/logger"
 	elasticsearch7 "github.com/elastic/go-elasticsearch/v7"
 	"github.com/elastic/go-elasticsearch/v7/esapi"
-	"io"
-	"strings"
 )
 
 type ElasticClientV7 struct {
@@ -20,9 +21,8 @@ var ctx = context.Background()
 
 func (ec *ElasticClientV7) FindByDSL(index string, dsl string, source []string) ([]any, int, int) {
 	req := esapi.SearchRequest{
-		Index:        []string{index},
-		DocumentType: []string{"_doc"},
-		Body:         strings.NewReader(dsl),
+		Index: []string{index},
+		Body:  strings.NewReader(dsl),
 	}
 	if source != nil {
 		req.Source = source
@@ -52,9 +52,8 @@ func (ec *ElasticClientV7) FindByDSL(index string, dsl string, source []string) 
 
 func (ec *ElasticClientV7) CountByDSL(index string, dsl string) (int, int) {
 	req := esapi.CountRequest{
-		Index:        []string{index},
-		DocumentType: []string{"_doc"},
-		Body:         strings.NewReader(dsl),
+		Index: []string{index},
+		Body:  strings.NewReader(dsl),
 	}
 	res, e := req.Do(ctx, ec.client)
 	if e != nil {

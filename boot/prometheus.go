@@ -2,19 +2,21 @@ package boot
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
+	"sync"
+
 	"github.com/dream-mo/prom-elastic-alert/conf"
 	"github.com/dream-mo/prom-elastic-alert/utils/logger"
 	redisx "github.com/dream-mo/prom-elastic-alert/utils/redis"
 	"github.com/prometheus/client_golang/prometheus"
-	"strconv"
-	"strings"
-	"sync"
 )
 
 type ElasticAlertPrometheusMetrics struct {
 	Query         sync.Map // map[string]QueryMetrics
 	OpRedis       sync.Map // map[string]OpRedisMetrics
 	WebhookNotify sync.Map // map[string]WebhookNotifyMetrics
+	RuleHit       sync.Map // map[string]RuleHitMetrics
 }
 
 func NewElasticAlertPrometheusMetrics() *ElasticAlertPrometheusMetrics {
@@ -22,6 +24,7 @@ func NewElasticAlertPrometheusMetrics() *ElasticAlertPrometheusMetrics {
 		Query:         sync.Map{},
 		OpRedis:       sync.Map{},
 		WebhookNotify: sync.Map{},
+		RuleHit:       sync.Map{},
 	}
 }
 
@@ -50,6 +53,16 @@ type WebhookNotifyMetrics struct {
 	Value    int64
 }
 
+type RuleHitMetrics struct {
+	UniqueId  string
+	Path      string
+	EsAddress string
+	Index     string
+	Value     int
+	// TODO
+	// message or dsl query key
+}
+
 type RuleStatusCollector struct {
 	Ea                *ElasticAlert
 	AppInfoDesc       *prometheus.Desc
@@ -58,6 +71,7 @@ type RuleStatusCollector struct {
 	QueryDesc         *prometheus.Desc
 	OpRedisDesc       *prometheus.Desc
 	WebhookNotifyDesc *prometheus.Desc
+	RuleHitDesc       *prometheus.Desc
 }
 
 func (rc *RuleStatusCollector) Describe(ch chan<- *prometheus.Desc) {
@@ -67,6 +81,7 @@ func (rc *RuleStatusCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- rc.QueryDesc
 	ch <- rc.OpRedisDesc
 	ch <- rc.WebhookNotifyDesc
+	ch <- rc.RuleHitDesc
 }
 
 func (rc *RuleStatusCollector) Collect(ch chan<- prometheus.Metric) {
@@ -78,6 +93,7 @@ func (rc *RuleStatusCollector) Collect(ch chan<- prometheus.Metric) {
 		rc.collectQueryMetrics(ch, rule)
 		rc.collectOpRedisMetrics(ch, rule)
 		rc.collectWebhookNotifyMetrics(ch, rule)
+		rc.collectRuleHitMetrics(ch, rule)
 		return true
 	})
 }
@@ -90,6 +106,19 @@ func (rc *RuleStatusCollector) collectQueryMetrics(ch chan<- prometheus.Metric, 
 			v := value.(QueryMetrics)
 			labelValues := []string{v.UniqueId, v.Path, v.EsAddress, v.Index, strconv.Itoa(v.Status)}
 			ch <- prometheus.MustNewConstMetric(rc.QueryDesc, prometheus.CounterValue, float64(v.Value), labelValues...)
+			return true
+		})
+	}
+}
+
+func (rc *RuleStatusCollector) collectRuleHitMetrics(ch chan<- prometheus.Metric, rule *conf.Rule) {
+	val, ok := rc.Ea.metrics.Load(rule.UniqueId)
+	if ok {
+		m := val.(*ElasticAlertPrometheusMetrics)
+		m.RuleHit.Range(func(key, value any) bool {
+			v := value.(RuleHitMetrics)
+			labelValues := []string{v.UniqueId, v.Path, v.EsAddress, v.Index}
+			ch <- prometheus.MustNewConstMetric(rc.RuleHitDesc, prometheus.GaugeValue, float64(v.Value), labelValues...)
 			return true
 		})
 	}
@@ -188,6 +217,12 @@ func NewRuleStatusCollector(ea *ElasticAlert) *RuleStatusCollector {
 			ea.buildFQName("webhook_notify"),
 			"Show call webhook notify alert times",
 			[]string{"unique_id", "path", "status"},
+			prometheus.Labels{},
+		),
+		RuleHitDesc: prometheus.NewDesc(
+			ea.buildFQName("rule_hit"),
+			"Show rule hit: not hit(0)",
+			[]string{"unique_id", "path", "es_address", "index"},
 			prometheus.Labels{},
 		),
 	}

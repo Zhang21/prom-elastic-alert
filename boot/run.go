@@ -5,6 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/creasty/defaults"
 	"github.com/dream-mo/prom-elastic-alert/conf"
 	"github.com/dream-mo/prom-elastic-alert/utils/alertmanager"
@@ -15,10 +20,6 @@ import (
 	"github.com/go-co-op/gocron"
 	"github.com/go-redis/redis/v8"
 	"github.com/prometheus/client_golang/prometheus"
-	"math"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 var (
@@ -242,6 +243,7 @@ func (ea *ElasticAlert) runRuleQuery(r *conf.Rule) []any {
 	count, statusCode := client.CountByDSL(r.Index, dsl)
 	go func() {
 		ea.addQueryMetrics(r, statusCode)
+		ea.addRuleHitMetrics(r, count)
 	}()
 	s := fmt.Sprintf("rules: %s index: %s dsl: %s hits_num: %d", r.FilePath, r.Index, dst.String(), count)
 	logger.Logger.Debugln(s)
@@ -299,6 +301,19 @@ func (ea *ElasticAlert) addQueryMetrics(r *conf.Rule, statusCode int) {
 	}
 }
 
+func (ea *ElasticAlert) addRuleHitMetrics(r *conf.Rule, hit int) {
+	f := r.GetMetricsQueryFingerprint(hit)
+	v, _ := ea.metrics.Load(r.UniqueId)
+	eam := v.(*ElasticAlertPrometheusMetrics)
+	eam.RuleHit.Store(f, RuleHitMetrics{
+		UniqueId:  r.UniqueId,
+		Path:      r.FilePath,
+		EsAddress: r.GetEsAddress(),
+		Index:     r.Index,
+		Value:     hit,
+	})
+}
+
 func (ea *ElasticAlert) addOpRedisMetrics(uniqueId string, path string, cmd string, key string, status int) {
 	f := conf.GetMetricsOpRedisFingerprint(uniqueId, path, cmd, key, status)
 	v, _ := ea.metrics.Load(uniqueId)
@@ -346,6 +361,8 @@ func (ea *ElasticAlert) pushAlert() {
 		ruleUniqueId := key.(string)
 		alert := value.(AlertContent)
 		redisKey := alert.getUrlHashKey()
+		t := fmt.Sprintf("redis key: %s", redisKey)
+		logger.Logger.Debugln(t)
 		msg := AlertSampleMessage{
 			ES:    alert.Rule.ES,
 			Index: alert.Rule.Index,
