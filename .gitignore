@@ -7,3 +7,5 @@ example/alertmanager/data/*
 vendor/
 prom-elastic-alert
 demo-config.yaml
+# Added by goreleaser init:
+dist/

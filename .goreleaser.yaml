@@ -1,0 +1,48 @@
+version: 2
+
+project_name: prom-elastic-alert
+
+env:
+  - GO11MODULE=on
+  - GO111MODULE=on
+  - GOPROXY=https://goproxy.io
+  - CGO_ENABLED=0
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod vendor
+
+builds:
+  - id: linux-amd64
+    goos:
+      - linux
+    goarch:
+      - amd64
+    main: main.go
+    binary: prom-elastic-alert
+
+archives:
+  - id: archive-package
+    formats: [ 'tar.gz' ]
+    # this name template makes the OS and Arch compatible with the results of `uname`.
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    # use zip for windows archives
+    format_overrides:
+      - goos: windows
+        formats: [ 'zip']
+    # include other files in the archive package
+    files:
+      - config.yaml
+      - rules/demo.rule.yaml.example
+    wrap_in_directory: true
+
+checksum:
+  name_template: 'checksums.txt'
+
+release:
+  footer: >-
+
+    ---
+
+    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
